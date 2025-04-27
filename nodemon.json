@@ -1,0 +1,6 @@
+{
+  "watch": ["server.js", "schema/", "resolvers/", "models/", "middleware/"],
+  "ext": "js,json,graphql",
+  "ignore": ["node_modules/"],
+  "exec": "node server.js"
+}
