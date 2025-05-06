@@ -1,15 +1,50 @@
-// server/models/User.js
-
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const UserSchema = new mongoose.Schema({
-  name: {
+  firstName: {
     type: String,
-    required: [true, 'Name is required'],
+    required: [true, 'First name is required'],
     trim: true,
-    minlength: [2, 'Name must be at least 2 characters long'],
-    maxlength: [50, 'Name cannot exceed 50 characters']
+    minlength: [2, 'First name must be at least 2 characters long'],
+    maxlength: [50, 'First name cannot exceed 50 characters']
+  },
+  middleName: {
+    type: String,
+    trim: true,
+    default: null,
+    minlength: [2, 'Middle name must be at least 2 characters long'],
+    maxlength: [50, 'Middle name cannot exceed 50 characters']
+  },  
+  lastName: {
+    type: String,
+    required: [true, 'Last name is required'],
+    trim: true,
+    minlength: [2, 'Last name must be at least 2 characters long'],
+    maxlength: [50, 'Last name cannot exceed 50 characters']
+  },
+  companyName: {
+    type: String,
+    required: [true, 'Company/Business name is required'],
+    trim: true,
+    minlength: [2, 'Company name must be at least 2 characters long']
+  },
+  companyAddress: {
+    type: String,
+    required: [true, 'Company/Business address is required'],
+    trim: true,
+    minlength: [10, 'Company address must be at least 10 characters long']
+  },
+  houseAddress: {
+    type: String,
+    trim: true,
+    default: null
+  },  
+  contactNumber: {
+    type: String,
+    required: [true, 'Contact number is required'],
+    trim: true,
+    match: [/^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/, 'Please provide a valid phone number']
   },
   email: {
     type: String,
@@ -24,23 +59,11 @@ const UserSchema = new mongoose.Schema({
     required: [true, 'Password is required'],
     minlength: [8, 'Password must be at least 8 characters long']
   },
-  houseAddress: {
-    type: String,
-    required: [true, 'House address is required'],
-    trim: true,
-    minlength: [10, 'Address must be at least 10 characters long']
-  },
-  contactNumber: {
-    type: String,
-    required: [true, 'Contact number is required'],
-    trim: true,
-    match: [/^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/, 'Please provide a valid phone number']
-  },
   role: {
     type: String,
-    enum: ['USER', 'ADMIN'],
+    enum: ['USER', 'ADMIN', 'SUPERADMIN'], // ← Add 'SUPERADMIN'
     default: 'USER'
-  },
+  },  
   isEmailVerified: {
     type: Boolean,
     default: false
@@ -78,6 +101,10 @@ const UserSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  tokenVersion: {
+    type: Number,
+    default: 0
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -90,21 +117,18 @@ const UserSchema = new mongoose.Schema({
   timestamps: true,
   methods: {
     isLocked() {
-      // Check if account is currently locked
-      return this.accountLocked && 
-             this.lockUntil && 
-             this.lockUntil > new Date();
+      return this.accountLocked && this.lockUntil && this.lockUntil > new Date();
     }
   }
 });
 
-// Pre-save hook to update timestamps
+// Pre-save hook to update updatedAt
 UserSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
 
-// Ensure email is unique (case-insensitive)
+// Ensure email uniqueness (case-insensitive)
 UserSchema.index({ email: 1 }, { unique: true });
 
 const User = mongoose.model('User', UserSchema);

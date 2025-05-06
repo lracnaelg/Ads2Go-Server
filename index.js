@@ -5,8 +5,8 @@ const { expressMiddleware } = require('@apollo/server/express4');
 const cors = require('cors');
 require('dotenv').config();
 
-const typeDefs = require('./schema/typeDefs');
-const resolvers = require('./resolvers/userResolvers');
+const typeDefs = require('./schema/userSchema');
+const resolvers = require('./resolvers/userResolver');
 const { authMiddleware } = require('./middleware/auth');
 
 // Ensure MONGODB_URI exists in .env

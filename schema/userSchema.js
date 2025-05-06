@@ -8,15 +8,25 @@ const typeDefs = gql`
 
   type User {
     id: ID!
-    name: String!
+    firstName: String!
+    middleName: String 
+    lastName: String!
     email: String!
-    houseAddress: String!
+    companyName: String!
+    companyAddress: String!
+    houseAddress: String
     contactNumber: String!
     role: UserRole!
     isEmailVerified: Boolean!
     lastLogin: String
     createdAt: String!
     updatedAt: String!
+  }
+
+  type UserUpdateResponse {
+    success: Boolean!
+    message: String!
+    user: User!
   }
 
   type ResponseMessage {
@@ -52,17 +62,26 @@ const typeDefs = gql`
   }
 
   input CreateUserInput {
-    name: String!
+    firstName: String!
+    middleName: String 
+    lastName: String!
+    companyName: String!
+    companyAddress: String!
+    contactNumber: String!
     email: String!
     password: String!
-    houseAddress: String!
-    contactNumber: String!
+    houseAddress: String!   
   }
 
   input UpdateUserInput {
-    name: String
-    houseAddress: String
+    firstName: String
+    middleName: String
+    lastName: String
+    companyName: String
+    companyAddress: String
     contactNumber: String
+    email: String
+    houseAddress: String
   }
 
   input DeviceInfoInput {
@@ -89,29 +108,33 @@ const typeDefs = gql`
     getUserSessions(userId: ID!): [Session!]!
     
     # User queries
-    me: User
+    getOwnUserDetails: User
     checkPasswordStrength(password: String!): PasswordStrength!
     getMyActiveSessions: [Session!]!
   }
 
   type Mutation {
-    # User mutations
-    createUser(input: CreateUserInput!): AuthPayload!
-    updateUser(input: UpdateUserInput!): User!
-    deleteUser(id: ID!): ResponseMessage!
-    login(email: String!, password: String!, deviceInfo: DeviceInfoInput!): AuthPayload!
-    logout: Boolean!
-    logoutAllSessions: Boolean!
-    
-    # Email verification
-    verifyEmail(code: String!): VerificationResponse
-    resendVerificationCode(email: String!): VerificationResponse
-    
-    # Password management
-    requestPasswordReset(email: String!): Boolean!
-    resetPassword(token: String!, newPassword: String!): Boolean!
-    changePassword(currentPassword: String!, newPassword: String!): Boolean!
-  }
+  # User mutations
+  createUser(input: CreateUserInput!): AuthPayload!
+  updateUser(input: UpdateUserInput!): UserUpdateResponse!
+  deleteUser(id: ID!): ResponseMessage!
+  login(email: String!, password: String!, deviceInfo: DeviceInfoInput!): AuthPayload!
+  logout: Boolean!
+  logoutAllSessions: Boolean!
+
+  # Admin management
+  createAdminUser(input: CreateUserInput!): UserUpdateResponse!
+
+  # Email verification
+  verifyEmail(code: String!): VerificationResponse
+  resendVerificationCode(email: String!): VerificationResponse
+
+  # Password management
+  requestPasswordReset(email: String!): Boolean!
+  resetPassword(token: String!, newPassword: String!): Boolean!
+  changePassword(currentPassword: String!, newPassword: String!): Boolean!
+}
+
 `;
 
 module.exports = typeDefs;
