@@ -1,7 +1,6 @@
 const gql = require('graphql-tag');
 
 const typeDefs = gql`
-
   enum DriverAccountStatus {
     PENDING
     ACTIVE
@@ -12,6 +11,13 @@ const typeDefs = gql`
     ONLINE
     OFFLINE
     ERROR
+  }
+
+  enum InstalledMaterialType {
+    LCD
+    BANNER
+    HEADDRESS
+    STICKER
   }
 
   type Driver {
@@ -37,6 +43,7 @@ const typeDefs = gql`
     totalDistanceTraveled: Float!
     totalAdImpressions: Int!
     installedDeviceId: String
+    installedMaterialType: InstalledMaterialType
     deviceStatus: DeviceStatus!
     qrCodeIdentifier: String!
     isEmailVerified: Boolean!
@@ -57,31 +64,30 @@ const typeDefs = gql`
   }
 
   input CreateDriverInput {
-  driverId: String!
-  firstName: String!
-  lastName: String!
-  contactNumber: String!
-  email: String!
-  password: String!   # <--- ADD THIS LINE
-  address: String!
-  licenseNumber: String!
-  licensePictureURL: String!
-  vehiclePlateNumber: String!
-  vehicleType: String!
-  vehicleModel: String!
-  vehicleYear: Int!
-  vehiclePhotoURL: String!
-  orCrPictureURL: String!
-  qrCodeIdentifier: String!
-}
-
+    firstName: String!
+    lastName: String!
+    contactNumber: String!
+    email: String!
+    password: String!
+    address: String!
+    licenseNumber: String!
+    licensePictureURL: String!
+    vehiclePlateNumber: String!
+    vehicleType: String!
+    vehicleModel: String!
+    vehicleYear: Int!
+    vehiclePhotoURL: String!
+    orCrPictureURL: String!
+    qrCodeIdentifier: String!
+    installedMaterialType: InstalledMaterialType
+  }
 
   input UpdateDriverInput {
     firstName: String
     lastName: String
     contactNumber: String
     email: String
-    password: String       # <-- Optional: allow password update if you want
+    password: String
     address: String
     licenseNumber: String
     licensePictureURL: String
@@ -93,6 +99,7 @@ const typeDefs = gql`
     orCrPictureURL: String
     accountStatus: DriverAccountStatus
     deviceStatus: DeviceStatus
+    installedMaterialType: InstalledMaterialType
   }
 
   type Query {
@@ -104,12 +111,10 @@ const typeDefs = gql`
     createDriver(input: CreateDriverInput!): DriverResponse!
     updateDriver(id: ID!, input: UpdateDriverInput!): DriverResponse!
     deleteDriver(id: ID!): DriverResponse!
-
-loginDriver(email: String!, password: String!): AuthPayload!
+    loginDriver(email: String!, password: String!): AuthPayload!
     verifyDriverEmail(code: String!): DriverResponse!
     resendDriverVerificationCode(email: String!): DriverResponse!
   }
-
 `;
 
 module.exports = typeDefs;

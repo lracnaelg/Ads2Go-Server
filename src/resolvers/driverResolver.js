@@ -19,6 +19,15 @@ const checkAdmin = (user) => {
   return user;
 };
 
+// Utility: auto-generate driverId like DRV-001
+const generateDriverId = async () => {
+  const lastDriver = await Driver.findOne().sort({ createdAt: -1 });
+  if (!lastDriver || !lastDriver.driverId) return 'DRV-001';
+  const lastNum = parseInt(lastDriver.driverId.split('-')[1]);
+  const nextNum = lastNum + 1;
+  return `DRV-${String(nextNum).padStart(3, '0')}`;
+};
+
 const resolvers = {
   Query: {
     getAllDrivers: async (_, __, { user }) => {
@@ -36,7 +45,6 @@ const resolvers = {
   Mutation: {
     createDriver: async (_, { input }) => {
       const {
-        driverId,
         firstName,
         lastName,
         contactNumber,
@@ -52,6 +60,7 @@ const resolvers = {
         vehiclePhotoURL,
         orCrPictureURL,
         qrCodeIdentifier,
+        installedMaterialType, // Optional
       } = input;
 
       if (!validator.isEmail(email)) throw new Error('Invalid email address');
@@ -68,9 +77,10 @@ const resolvers = {
       }
 
       const verificationCode = EmailService.generateVerificationCode();
+      const driverId = await generateDriverId();
 
       const newDriver = new Driver({
-        driverId: driverId.trim(),
+        driverId,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         contactNumber: normalizedNumber,
@@ -86,6 +96,7 @@ const resolvers = {
         vehiclePhotoURL: vehiclePhotoURL.trim(),
         orCrPictureURL: orCrPictureURL.trim(),
         qrCodeIdentifier: qrCodeIdentifier.trim(),
+        installedMaterialType: installedMaterialType || null, // Default to null if not provided
         accountStatus: 'PENDING',
         deviceStatus: 'OFFLINE',
         isEmailVerified: false,
@@ -105,45 +116,45 @@ const resolvers = {
     },
 
     loginDriver: async (_, { email, password }) => {
-  const driver = await Driver.findOne({ email });
-  if (!driver) throw new Error('No driver found with this email');
+      const driver = await Driver.findOne({ email });
+      if (!driver) throw new Error('No driver found with this email');
 
-  if (driver.accountLocked && driver.lockUntil && driver.lockUntil > new Date()) {
-    throw new Error('Account is temporarily locked. Please try again later.');
-  }
+      if (driver.accountLocked && driver.lockUntil && driver.lockUntil > new Date()) {
+        throw new Error('Account is temporarily locked. Please try again later.');
+      }
 
-  const isMatch = await driver.comparePassword(password);
-  if (!isMatch) {
-    driver.loginAttempts += 1;
-    if (driver.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
-      driver.accountLocked = true;
-      driver.lockUntil = new Date(Date.now() + LOCK_TIME);
-    }
-    await driver.save();
-    throw new Error('Invalid credentials');
-  }
+      const isMatch = await bcrypt.compare(password, driver.password);
+      if (!isMatch) {
+        driver.loginAttempts += 1;
+        if (driver.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+          driver.accountLocked = true;
+          driver.lockUntil = new Date(Date.now() + LOCK_TIME);
+        }
+        await driver.save();
+        throw new Error('Invalid credentials');
+      }
 
-  driver.loginAttempts = 0;
-  driver.accountLocked = false;
-  driver.lockUntil = null;
-  driver.lastLogin = new Date();
-  await driver.save();
+      driver.loginAttempts = 0;
+      driver.accountLocked = false;
+      driver.lockUntil = null;
+      driver.lastLogin = new Date();
+      await driver.save();
 
-  const freshDriver = await Driver.findById(driver._id);
+      const freshDriver = await Driver.findById(driver._id);
 
-  const token = jwt.sign(
-    {
-      driverId: freshDriver.id,
-      email: freshDriver.email,
-      isEmailVerified: freshDriver.isEmailVerified,
-      tokenVersion: freshDriver.tokenVersion,
+      const token = jwt.sign(
+        {
+          driverId: freshDriver.id,
+          email: freshDriver.email,
+          isEmailVerified: freshDriver.isEmailVerified,
+          tokenVersion: freshDriver.tokenVersion,
+        },
+        JWT_SECRET,
+        { expiresIn: '1d' }
+      );
+
+      return { token, driver: freshDriver };
     },
-    JWT_SECRET,
-    { expiresIn: '1d' }
-  );
-
-  return { token, driver: freshDriver };
-},
 
     verifyDriverEmail: async (_, { code }) => {
       try {
@@ -156,7 +167,6 @@ const resolvers = {
         }
 
         const driver = await Driver.findOne({ emailVerificationCode: code.trim() });
-
         if (!driver) {
           return {
             success: false,
@@ -177,7 +187,6 @@ const resolvers = {
         driver.emailVerificationCode = null;
         driver.emailVerificationCodeExpires = null;
         driver.accountStatus = 'ACTIVE';
-
         await driver.save();
 
         return {
@@ -199,6 +208,16 @@ const resolvers = {
       const driver = await Driver.findOne({ email });
       if (!driver) throw new Error('Driver not found');
 
+      // Clear expired code if any
+      if (
+        driver.emailVerificationCodeExpires &&
+        new Date() > driver.emailVerificationCodeExpires
+      ) {
+        driver.emailVerificationCode = null;
+        driver.emailVerificationCodeExpires = null;
+      }
+
+      // Generate and send new code
       const newCode = EmailService.generateVerificationCode();
       driver.emailVerificationCode = newCode;
       driver.emailVerificationCodeExpires = new Date(Date.now() + 15 * 60 * 1000);
@@ -206,7 +225,10 @@ const resolvers = {
       await EmailService.sendVerificationEmail(driver.email, newCode);
       await driver.save();
 
-      return { success: true, message: 'New verification code sent to your email' };
+      return {
+        success: true,
+        message: 'New verification code sent to your email',
+      };
     },
 
     deleteDriver: async (_, { id }, { user }) => {

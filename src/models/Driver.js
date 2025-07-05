@@ -115,6 +115,11 @@ const DriverSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    installedMaterialType: {
+      type: String,
+      enum: ['LCD', 'BANNER', 'HEADDRESS', 'STICKER'],
+      default: null,
+    },
     deviceStatus: {
       type: String,
       enum: ['ONLINE', 'OFFLINE', 'ERROR'],
