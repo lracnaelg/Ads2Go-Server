@@ -8,18 +8,20 @@ const validator = require('validator');
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_TIME = 2 * 60 * 60 * 1000; // 2 hours
 
+// Helper: Ensure user is authenticated
 const checkAuth = (user) => {
   if (!user) throw new Error('Not authenticated');
   return user;
 };
 
+// Helper: Ensure user is an admin
 const checkAdmin = (user) => {
   checkAuth(user);
   if (user.role !== 'ADMIN') throw new Error('Not authorized. Admin access required.');
   return user;
 };
 
-// Utility: auto-generate driverId like DRV-001
+// Helper: Generate driver ID like DRV-001
 const generateDriverId = async () => {
   const lastDriver = await Driver.findOne().sort({ createdAt: -1 });
   if (!lastDriver || !lastDriver.driverId) return 'DRV-001';
@@ -34,6 +36,7 @@ const resolvers = {
       checkAdmin(user);
       return await Driver.find({});
     },
+
     getDriverById: async (_, { id }, { user }) => {
       checkAdmin(user);
       const driver = await Driver.findById(id);
@@ -60,9 +63,10 @@ const resolvers = {
         vehiclePhotoURL,
         orCrPictureURL,
         qrCodeIdentifier,
-        installedMaterialType, // Optional
+        installedMaterialType,
       } = input;
 
+      // Validate inputs
       if (!validator.isEmail(email)) throw new Error('Invalid email address');
       if (await Driver.findOne({ email })) throw new Error('Driver with this email already exists');
       if (!password || password.length < 6) throw new Error('Password must be at least 6 characters');
@@ -96,7 +100,7 @@ const resolvers = {
         vehiclePhotoURL: vehiclePhotoURL.trim(),
         orCrPictureURL: orCrPictureURL.trim(),
         qrCodeIdentifier: qrCodeIdentifier.trim(),
-        installedMaterialType: installedMaterialType || null, // Default to null if not provided
+        installedMaterialType: installedMaterialType || null,
         accountStatus: 'PENDING',
         deviceStatus: 'OFFLINE',
         isEmailVerified: false,
@@ -153,71 +157,60 @@ const resolvers = {
         { expiresIn: '1d' }
       );
 
-      return { token, driver: freshDriver };
+      return {
+        token,
+        driver: freshDriver,
+      };
     },
 
     verifyDriverEmail: async (_, { code }) => {
-      try {
-        if (!code || !code.trim()) {
-          return {
-            success: false,
-            message: 'Verification code is required.',
-            driver: null,
-          };
-        }
-
-        const driver = await Driver.findOne({ emailVerificationCode: code.trim() });
-        if (!driver) {
-          return {
-            success: false,
-            message: 'Invalid verification code.',
-            driver: null,
-          };
-        }
-
-        if (new Date() > driver.emailVerificationCodeExpires) {
-          return {
-            success: false,
-            message: 'Verification code has expired.',
-            driver: null,
-          };
-        }
-
-        driver.isEmailVerified = true;
-        driver.emailVerificationCode = null;
-        driver.emailVerificationCodeExpires = null;
-        driver.accountStatus = 'ACTIVE';
-        await driver.save();
-
-        return {
-          success: true,
-          message: 'Email verified successfully.',
-          driver,
-        };
-      } catch (err) {
-        console.error('verifyDriverEmail unexpected error:', err);
+      if (!code || !code.trim()) {
         return {
           success: false,
-          message: 'An unexpected error occurred. Please try again.',
+          message: 'Verification code is required.',
           driver: null,
         };
       }
+
+      const driver = await Driver.findOne({ emailVerificationCode: code.trim() });
+      if (!driver) {
+        return {
+          success: false,
+          message: 'Invalid verification code.',
+          driver: null,
+        };
+      }
+
+      if (new Date() > driver.emailVerificationCodeExpires) {
+        return {
+          success: false,
+          message: 'Verification code has expired.',
+          driver: null,
+        };
+      }
+
+      driver.isEmailVerified = true;
+      driver.emailVerificationCode = null;
+      driver.emailVerificationCodeExpires = null;
+      driver.accountStatus = 'ACTIVE';
+      await driver.save();
+
+      return {
+        success: true,
+        message: 'Email verified successfully.',
+        driver,
+      };
     },
 
     resendDriverVerificationCode: async (_, { email }) => {
       const driver = await Driver.findOne({ email });
       if (!driver) throw new Error('Driver not found');
 
-      // Clear expired code if any
-      if (
-        driver.emailVerificationCodeExpires &&
-        new Date() > driver.emailVerificationCodeExpires
-      ) {
+      if (driver.emailVerificationCodeExpires && new Date() > driver.emailVerificationCodeExpires) {
         driver.emailVerificationCode = null;
         driver.emailVerificationCodeExpires = null;
       }
 
-      // Generate and send new code
       const newCode = EmailService.generateVerificationCode();
       driver.emailVerificationCode = newCode;
       driver.emailVerificationCodeExpires = new Date(Date.now() + 15 * 60 * 1000);
