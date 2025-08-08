@@ -1,3 +1,5 @@
+//Resolvers/driverResolver.js
+
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const Driver = require('../models/Driver');
