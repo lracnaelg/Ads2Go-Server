@@ -5,34 +5,30 @@ const { JWT_SECRET } = require('../middleware/auth');
 const EmailService = require('../utils/emailService');
 const validator = require('validator');
 
-const MAX_LOGIN_ATTEMPTS = 5;
+const MAX_LOGIN_ATTEMPTS = 100;
 const LOCK_TIME = 2 * 60 * 60 * 1000; // 2 hours
 
-// Allowed vehicle types and their corresponding allowed material types
 const VEHICLE_MATERIAL_MAP = {
   Car: ['LCD', 'STICKER', 'HEADDRESS'],
   Bus: ['LCD', 'STICKER'],
   ETrike: ['STICKER', 'HEADDRESS'],
   Jeep: ['STICKER'],
-  Motorcycle: ['HEADDRESS'],
+  Motorcycle: ['LCD', 'BANNER']
 };
 
 const ALLOWED_VEHICLE_TYPES = Object.keys(VEHICLE_MATERIAL_MAP);
 
-// Helper: Ensure user is authenticated
 const checkAuth = (user) => {
   if (!user) throw new Error('Not authenticated');
   return user;
 };
 
-// Helper: Ensure user is an admin
 const checkAdmin = (user) => {
   checkAuth(user);
   if (user.role !== 'ADMIN') throw new Error('Not authorized. Admin access required.');
   return user;
 };
 
-// Helper: Generate driver ID like DRV-001
 const generateDriverId = async () => {
   const lastDriver = await Driver.findOne().sort({ createdAt: -1 });
   if (!lastDriver || !lastDriver.driverId) return 'DRV-001';
@@ -47,7 +43,6 @@ const resolvers = {
       checkAdmin(user);
       return await Driver.find({});
     },
-
     getDriverById: async (_, { id }, { user }) => {
       checkAdmin(user);
       const driver = await Driver.findById(id);
@@ -73,18 +68,14 @@ const resolvers = {
         vehicleYear,
         vehiclePhotoURL,
         orCrPictureURL,
-        qrCodeIdentifier,
         installedMaterialType,
+        preferredMaterialType
       } = input;
 
-      // Email validation
       if (!validator.isEmail(email)) throw new Error('Invalid email address');
       if (await Driver.findOne({ email })) throw new Error('Driver with this email already exists');
-
-      // Password validation
       if (!password || password.length < 6) throw new Error('Password must be at least 6 characters');
 
-      // Contact number validation
       let normalizedNumber = contactNumber.replace(/\s/g, '');
       const phoneRegex = /^(\+63|0)?\d{10}$/;
       if (!phoneRegex.test(normalizedNumber)) throw new Error('Invalid Philippine mobile number');
@@ -94,12 +85,10 @@ const resolvers = {
           : '+63' + normalizedNumber;
       }
 
-      // Vehicle type validation
       if (!ALLOWED_VEHICLE_TYPES.includes(vehicleType)) {
         throw new Error(`Invalid vehicle type. Allowed types: ${ALLOWED_VEHICLE_TYPES.join(', ')}`);
       }
 
-      // Material type validation based on vehicle type
       if (
         installedMaterialType &&
         !VEHICLE_MATERIAL_MAP[vehicleType]?.includes(installedMaterialType)
@@ -109,9 +98,19 @@ const resolvers = {
         );
       }
 
-      // Generate ID and verification code
+      if (
+        preferredMaterialType &&
+        !preferredMaterialType.every((m) => VEHICLE_MATERIAL_MAP[vehicleType]?.includes(m))
+      ) {
+        throw new Error(
+          `One or more preferred materials are invalid for vehicle type "${vehicleType}". Allowed: ${VEHICLE_MATERIAL_MAP[vehicleType].join(', ')}`
+        );
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
       const verificationCode = EmailService.generateVerificationCode();
       const driverId = await generateDriverId();
+      const qrCodeIdentifier = `QR-${Date.now()}`;
 
       const newDriver = new Driver({
         driverId,
@@ -119,7 +118,7 @@ const resolvers = {
         lastName: lastName.trim(),
         contactNumber: normalizedNumber,
         email: email.toLowerCase().trim(),
-        password: password.trim(),
+        password: hashedPassword,
         address: address.trim(),
         licenseNumber: licenseNumber.trim(),
         licensePictureURL: licensePictureURL.trim(),
@@ -129,8 +128,9 @@ const resolvers = {
         vehicleYear,
         vehiclePhotoURL: vehiclePhotoURL.trim(),
         orCrPictureURL: orCrPictureURL.trim(),
-        qrCodeIdentifier: qrCodeIdentifier.trim(),
+        qrCodeIdentifier,
         installedMaterialType: installedMaterialType || null,
+        preferredMaterialType: preferredMaterialType || null,
         accountStatus: 'PENDING',
         deviceStatus: 'OFFLINE',
         isEmailVerified: false,
@@ -149,109 +149,86 @@ const resolvers = {
       };
     },
 
-    loginDriver: async (_, { email, password }) => {
-      const driver = await Driver.findOne({ email });
-      if (!driver) throw new Error('No driver found with this email');
-
-      if (driver.accountLocked && driver.lockUntil && driver.lockUntil > new Date()) {
-        throw new Error('Account is temporarily locked. Please try again later.');
-      }
-
-      const isMatch = await bcrypt.compare(password, driver.password);
-      if (!isMatch) {
-        driver.loginAttempts += 1;
-        if (driver.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
-          driver.accountLocked = true;
-          driver.lockUntil = new Date(Date.now() + LOCK_TIME);
-        }
-        await driver.save();
-        throw new Error('Invalid credentials');
-      }
-
-      driver.loginAttempts = 0;
-      driver.accountLocked = false;
-      driver.lockUntil = null;
-      driver.lastLogin = new Date();
-      await driver.save();
-
-      const freshDriver = await Driver.findById(driver._id);
-
-      const token = jwt.sign(
-        {
-          driverId: freshDriver.id,
-          email: freshDriver.email,
-          isEmailVerified: freshDriver.isEmailVerified,
-          tokenVersion: freshDriver.tokenVersion,
-        },
-        JWT_SECRET,
-        { expiresIn: '1d' }
-      );
-
-      return {
-        token,
-        driver: freshDriver,
-      };
-    },
-
     verifyDriverEmail: async (_, { code }) => {
-      if (!code || !code.trim()) {
-        return {
-          success: false,
-          message: 'Verification code is required.',
-          driver: null,
-        };
-      }
+      const driver = await Driver.findOne({ emailVerificationCode: code });
 
-      const driver = await Driver.findOne({ emailVerificationCode: code.trim() });
       if (!driver) {
         return {
           success: false,
-          message: 'Invalid verification code.',
+          message: 'Invalid or expired verification code',
           driver: null,
         };
       }
 
-      if (new Date() > driver.emailVerificationCodeExpires) {
+      if (new Date(driver.emailVerificationCodeExpires) < new Date()) {
         return {
           success: false,
-          message: 'Verification code has expired.',
+          message: 'Verification code has expired',
           driver: null,
         };
       }
 
       driver.isEmailVerified = true;
+      driver.accountStatus = 'PENDING'; // Or 'ACTIVE' if you want
       driver.emailVerificationCode = null;
       driver.emailVerificationCodeExpires = null;
-      driver.accountStatus = 'ACTIVE';
       await driver.save();
 
       return {
         success: true,
-        message: 'Email verified successfully.',
+        message: 'Email verified successfully',
         driver,
       };
     },
 
-    resendDriverVerificationCode: async (_, { email }) => {
-      const driver = await Driver.findOne({ email });
+    approveDriver: async (_, { id, materialTypeOverride }, { user }) => {
+      checkAdmin(user);
+      const driver = await Driver.findById(id);
       if (!driver) throw new Error('Driver not found');
 
-      if (driver.emailVerificationCodeExpires && new Date() > driver.emailVerificationCodeExpires) {
-        driver.emailVerificationCode = null;
-        driver.emailVerificationCodeExpires = null;
+      driver.accountStatus = 'ACTIVE';
+      driver.approvalDate = new Date().toISOString();
+
+      if (materialTypeOverride && materialTypeOverride.length) {
+        if (!materialTypeOverride.every(m => VEHICLE_MATERIAL_MAP[driver.vehicleType].includes(m))) {
+          throw new Error('One or more override materials are invalid for this vehicle type');
+        }
+        driver.preferredMaterialType = materialTypeOverride;
+        driver.installedMaterialType = materialTypeOverride[0];
+        driver.adminOverride = true;
+      } else if (driver.preferredMaterialType && driver.preferredMaterialType.length) {
+        driver.installedMaterialType = driver.preferredMaterialType[0];
       }
 
-      const newCode = EmailService.generateVerificationCode();
-      driver.emailVerificationCode = newCode;
-      driver.emailVerificationCodeExpires = new Date(Date.now() + 15 * 60 * 1000);
+      await driver.save();
+      return { success: true, message: 'Driver approved.', driver };
+    },
 
-      await EmailService.sendVerificationEmail(driver.email, newCode);
+    rejectDriver: async (_, { id, reason }, { user }) => {
+      checkAdmin(user);
+      const driver = await Driver.findById(id);
+      if (!driver) throw new Error('Driver not found');
+
+      driver.accountStatus = 'REJECTED';
+      driver.rejectedReason = reason;
       await driver.save();
 
-      return {
-        success: true,
-        message: 'New verification code sent to your email',
-      };
+      return { success: true, message: 'Driver rejected.' };
+    },
+
+    resubmitDriver: async (_, { id, input }, { user }) => {
+      checkAuth(user);
+      const driver = await Driver.findById(id);
+      if (!driver) throw new Error('Driver not found');
+      if (String(driver._id) !== String(user.driverId) && user.role !== 'ADMIN') {
+        throw new Error('Unauthorized resubmission attempt');
+      }
+
+      Object.assign(driver, input);
+      driver.accountStatus = 'RESUBMITTED';
+      await driver.save();
+
+      return { success: true, message: 'Requirements resubmitted.', driver };
     },
 
     deleteDriver: async (_, { id }, { user }) => {

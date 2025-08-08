@@ -1,5 +1,3 @@
-//schema/driverSchema.js
-
 const gql = require('graphql-tag');
 
 const typeDefs = gql`
@@ -7,6 +5,9 @@ const typeDefs = gql`
     PENDING
     ACTIVE
     SUSPENDED
+    APPROVED
+    REJECTED
+    RESUBMITTED
   }
 
   enum DeviceStatus {
@@ -52,6 +53,10 @@ const typeDefs = gql`
     emailVerificationCode: String
     emailVerificationCodeExpires: String
     lastLogin: String
+    preferredMaterialType: [InstalledMaterialType!]
+    adminOverride: Boolean
+    approvalDate: String
+    rejectedReason: String
   }
 
   type DriverResponse {
@@ -80,8 +85,8 @@ const typeDefs = gql`
     vehicleYear: Int!
     vehiclePhotoURL: String!
     orCrPictureURL: String!
-    qrCodeIdentifier: String!
     installedMaterialType: InstalledMaterialType
+    preferredMaterialType: [InstalledMaterialType!]
   }
 
   input UpdateDriverInput {
@@ -102,6 +107,25 @@ const typeDefs = gql`
     accountStatus: DriverAccountStatus
     deviceStatus: DeviceStatus
     installedMaterialType: InstalledMaterialType
+    preferredMaterialType: [InstalledMaterialType!]
+  }
+
+  input ResubmitDriverInput {
+    firstName: String
+    lastName: String
+    contactNumber: String
+    email: String
+    password: String
+    address: String
+    licenseNumber: String
+    licensePictureURL: String
+    vehiclePlateNumber: String
+    vehicleType: String
+    vehicleModel: String
+    vehicleYear: Int
+    vehiclePhotoURL: String
+    orCrPictureURL: String
+    preferredMaterialType: [InstalledMaterialType!]
   }
 
   type Query {
@@ -116,6 +140,9 @@ const typeDefs = gql`
     loginDriver(email: String!, password: String!): AuthPayload!
     verifyDriverEmail(code: String!): DriverResponse!
     resendDriverVerificationCode(email: String!): DriverResponse!
+    approveDriver(id: ID!, materialTypeOverride: [InstalledMaterialType]): DriverResponse!
+    rejectDriver(id: ID!, reason: String!): DriverResponse!
+    resubmitDriver(id: ID!, input: ResubmitDriverInput!): DriverResponse!
   }
 `;
 
