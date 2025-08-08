@@ -1,5 +1,3 @@
-//Resolvers/driverResolver.js
-
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const Driver = require('../models/Driver');
@@ -9,6 +7,17 @@ const validator = require('validator');
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_TIME = 2 * 60 * 60 * 1000; // 2 hours
+
+// Allowed vehicle types and their corresponding allowed material types
+const VEHICLE_MATERIAL_MAP = {
+  Car: ['LCD', 'STICKER', 'HEADDRESS'],
+  Bus: ['LCD', 'STICKER'],
+  ETrike: ['STICKER', 'HEADDRESS'],
+  Jeep: ['STICKER'],
+  Motorcycle: ['HEADDRESS'],
+};
+
+const ALLOWED_VEHICLE_TYPES = Object.keys(VEHICLE_MATERIAL_MAP);
 
 // Helper: Ensure user is authenticated
 const checkAuth = (user) => {
@@ -68,11 +77,14 @@ const resolvers = {
         installedMaterialType,
       } = input;
 
-      // Validate inputs
+      // Email validation
       if (!validator.isEmail(email)) throw new Error('Invalid email address');
       if (await Driver.findOne({ email })) throw new Error('Driver with this email already exists');
+
+      // Password validation
       if (!password || password.length < 6) throw new Error('Password must be at least 6 characters');
 
+      // Contact number validation
       let normalizedNumber = contactNumber.replace(/\s/g, '');
       const phoneRegex = /^(\+63|0)?\d{10}$/;
       if (!phoneRegex.test(normalizedNumber)) throw new Error('Invalid Philippine mobile number');
@@ -82,6 +94,22 @@ const resolvers = {
           : '+63' + normalizedNumber;
       }
 
+      // Vehicle type validation
+      if (!ALLOWED_VEHICLE_TYPES.includes(vehicleType)) {
+        throw new Error(`Invalid vehicle type. Allowed types: ${ALLOWED_VEHICLE_TYPES.join(', ')}`);
+      }
+
+      // Material type validation based on vehicle type
+      if (
+        installedMaterialType &&
+        !VEHICLE_MATERIAL_MAP[vehicleType]?.includes(installedMaterialType)
+      ) {
+        throw new Error(
+          `Invalid material type "${installedMaterialType}" for vehicle type "${vehicleType}". Allowed: ${VEHICLE_MATERIAL_MAP[vehicleType].join(', ')}`
+        );
+      }
+
+      // Generate ID and verification code
       const verificationCode = EmailService.generateVerificationCode();
       const driverId = await generateDriverId();
 
