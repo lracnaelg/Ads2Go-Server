@@ -26,10 +26,12 @@ const typeDefs = gql`
   type Driver {
     id: ID!
     driverId: String!
+    reviewStatus: String
     firstName: String!
     lastName: String!
     contactNumber: String!
     email: String!
+    verified: Boolean!   # <-- Add this
     address: String!
     licenseNumber: String!
     licensePictureURL: String!
@@ -59,15 +61,18 @@ const typeDefs = gql`
     rejectedReason: String
   }
 
+  type AuthPayload {
+  success: Boolean!
+  message: String
+  token: String
+  driver: Driver
+}
+
   type DriverResponse {
     success: Boolean!
     message: String!
+    token: String
     driver: Driver
-  }
-
-  type AuthPayload {
-    token: String!
-    driver: Driver!
   }
 
   input CreateDriverInput {
@@ -130,19 +135,19 @@ const typeDefs = gql`
 
   type Query {
     getAllDrivers: [Driver!]!
-    getDriverById(id: ID!): Driver
+    getDriverById(driverId: ID!): Driver
   }
 
   type Mutation {
     createDriver(input: CreateDriverInput!): DriverResponse!
-    updateDriver(id: ID!, input: UpdateDriverInput!): DriverResponse!
-    deleteDriver(id: ID!): DriverResponse!
-    loginDriver(email: String!, password: String!): AuthPayload!
+    updateDriver(driverId: ID!, input: UpdateDriverInput!): DriverResponse!
+    deleteDriver(driverId: ID!): DriverResponse!
+    loginDriver(email: String!, password: String!): DriverResponse!
     verifyDriverEmail(code: String!): DriverResponse!
     resendDriverVerificationCode(email: String!): DriverResponse!
-    approveDriver(id: ID!, materialTypeOverride: [InstalledMaterialType]): DriverResponse!
-    rejectDriver(id: ID!, reason: String!): DriverResponse!
-    resubmitDriver(id: ID!, input: ResubmitDriverInput!): DriverResponse!
+    approveDriver(driverId: ID!, materialTypeOverride: [InstalledMaterialType]): DriverResponse!
+    rejectDriver(driverId: ID!, reason: String!): DriverResponse!
+    resubmitDriver(driverId: ID!, input: ResubmitDriverInput!): DriverResponse!
   }
 `;
 

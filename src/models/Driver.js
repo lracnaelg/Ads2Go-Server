@@ -205,14 +205,8 @@ const DriverSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-DriverSchema.pre('save', async function (next) {
-  this.updatedAt = Date.now();
-  if (this.isModified('password')) {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-  }
-  next();
-});
+
+ 
 
 DriverSchema.methods.isLocked = function () {
   return this.accountLocked && this.lockUntil && this.lockUntil > new Date();
