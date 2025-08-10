@@ -16,9 +16,21 @@ const userResolvers = require('./resolvers/userResolver');
 const driverTypeDefs = require('./schema/driverSchema');
 const driverResolvers = require('./resolvers/driverResolver');
 
+// Load Material schema and resolvers
+const materialTypeDefs = require('./schema/materialSchema');
+const materialResolvers = require('./resolvers/materialResolver');
+
 // Merge them into one schema and one resolver object
-const typeDefs = mergeTypeDefs([userTypeDefs, driverTypeDefs]);
-const resolvers = mergeResolvers([userResolvers, driverResolvers]);
+const typeDefs = mergeTypeDefs([
+  userTypeDefs,
+  driverTypeDefs,
+  materialTypeDefs
+]);
+const resolvers = mergeResolvers([
+  userResolvers,
+  driverResolvers,
+  materialResolvers
+]);
 
 const { authMiddleware } = require('./middleware/auth');
 
