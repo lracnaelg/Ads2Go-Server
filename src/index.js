@@ -103,17 +103,43 @@ async function startServer() {
 
   // ✅ Global CORS
   app.use(cors({
-    origin: [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'http://localhost',
-      'http://127.0.0.1',
-      'http://192.168.1.5:3000',
-      'https://ads2go-6ead4.web.app',
-      'https://ads2go-6ead4.firebaseapp.com',
-    ],
+    origin: function (origin, callback) {
+      const allowedOrigins = [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost',
+        'http://127.0.0.1',
+        'http://192.168.1.5:3000',
+        'https://ads2go-6ead4.web.app',
+        'https://ads2go-6ead4.firebaseapp.com',
+      ];
+      
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        console.log('✅ CORS: Allowing origin:', origin);
+        callback(null, true);
+      } else {
+        console.log('❌ CORS: Blocking origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 200 // Some legacy browsers choke on 204
   }));
+
+  // Handle preflight requests manually
+  app.options('*', (req, res) => {
+    console.log('🔄 Handling preflight request for:', req.headers.origin);
+    res.header('Access-Control-Allow-Origin', req.headers.origin);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.sendStatus(200);
+  });
 
   // Regular express body parsing
   app.use(express.json());
